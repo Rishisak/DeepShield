@@ -1,0 +1,23 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "HF_TOKEN secret not set — skip automated HF deploy."
+            exit 0
+          fi
+          git remote add space "https://Rishisak:${HF_TOKEN}@huggingface.co/spaces/Rishisak/DeepShield" || true
+          git push space main --force
