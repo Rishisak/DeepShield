@@ -170,8 +170,6 @@ def predict_image(face_bgr):
 # MAIN PREDICTION FUNCTION
 # =========================
 def predict_video(video_path, frames_to_sample=NUM_SAMPLED_FRAMES, progress_cb=None):
-    max_frames = int(os.environ.get("MAX_FRAMES", str(NUM_SAMPLED_FRAMES)))
-    frames_to_sample = min(frames_to_sample, max_frames)
     """
     Analyze a video for deepfake content using ViT model.
 
@@ -187,6 +185,8 @@ def predict_video(video_path, frames_to_sample=NUM_SAMPLED_FRAMES, progress_cb=N
         - frame_results: list of per-frame predictions with frame paths
         - mean_probs: averaged probabilities across all frames
     """
+    max_frames = int(os.environ.get("MAX_FRAMES", str(NUM_SAMPLED_FRAMES)))
+    frames_to_sample = min(frames_to_sample, max_frames)
 
     def emit(stage, progress, message=""):
         if progress_cb:
