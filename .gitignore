@@ -1,0 +1,35 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# DeepShield Specifics
+uploads/
+temp_frames/
+*.db
+*.pth
+public/models/
+*.pdf
+Wvolf_ViT_Deepfake_Detection/pytorch_model.bin
+Wvolf_ViT_Deepfake_Detection/training_args.bin

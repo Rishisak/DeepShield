@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+uploads
+temp_frames
+*.db
+__pycache__
+.env
+.vscode
+.idea

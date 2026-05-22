@@ -1,0 +1,13 @@
+flask
+flask-socketio
+flask-cors
+flask-bcrypt
+torch
+torchvision
+efficientnet_pytorch
+transformers
+numpy
+opencv-python-headless
+pillow
+fpdf
+requests
