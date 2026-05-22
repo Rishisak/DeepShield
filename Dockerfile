@@ -2,39 +2,39 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
-COPY . .
+RUN npm ci
+COPY index.html vite.config.js eslint.config.js ./
+COPY public ./public
+COPY src ./src
 ENV VITE_API_URL=
 RUN npm run build
 
-# Stage 2: Build the Python backend
-FROM python:3.9-slim
+# Stage 2: Python backend
+FROM python:3.11-slim
 WORKDIR /app
 
-# Install system dependencies for OpenCV and other libs
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+# OpenCV system libs (bookworm package names)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# CPU-only PyTorch first (smaller image, fits Render free tier builds)
+COPY requirements-docker.txt .
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r requirements-docker.txt
 
-# Copy the backend files
+# App code + built frontend
 COPY . /app
-
-# Copy the built frontend from Stage 1
 COPY --from=frontend-builder /app/dist /app/dist
 
-# Create necessary directories
-RUN mkdir -p uploads temp_frames
+RUN mkdir -p uploads temp_frames /tmp/hf_cache
 
-# Make port 7860 available to the world outside this container
-EXPOSE 7860
+ENV PORT=10000
+ENV FLASK_DEBUG=0
+ENV HF_HOME=/tmp/hf_cache
+ENV TRANSFORMERS_CACHE=/tmp/hf_cache
 
-# Define environment variable
-ENV PORT 7860
+EXPOSE 10000
 
-# Run app.py when the container launches
 CMD ["python", "app.py"]

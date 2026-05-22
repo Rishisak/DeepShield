@@ -7,6 +7,7 @@ import os
 import cv2
 import torch
 import uuid
+import threading
 import numpy as np
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForImageClassification
@@ -25,8 +26,14 @@ FACE_CASCADE = cv2.CascadeClassifier(
 )
 
 # =========================
-# GLOBAL MODEL LOADING
+# LAZY MODEL LOADING (fast HTTP startup for cloud deploy)
 # =========================
+processor = None
+vit_model = None
+id2label = None
+_load_lock = threading.Lock()
+
+
 def _load_vit_weights():
     """Load from local folder; fall back to Hugging Face Hub when weights are missing."""
     local_bin = os.path.join(MODEL_PATH, "pytorch_model.bin")
@@ -36,21 +43,23 @@ def _load_vit_weights():
     return HF_MODEL_ID, False
 
 
-print("[ViT] Loading Vision Transformer model...")
-try:
-    model_source, local_only = _load_vit_weights()
-    processor = AutoImageProcessor.from_pretrained(model_source, local_files_only=local_only)
-    vit_model = AutoModelForImageClassification.from_pretrained(
-        model_source, local_files_only=local_only
-    ).to(DEVICE)
-    vit_model.eval()
-    id2label = vit_model.config.id2label
-    print(f"[ViT] Model loaded successfully. Labels: {id2label}")
-except Exception as e:
-    print(f"[ViT] ERROR loading model: {e}")
-    processor = None
-    vit_model = None
-    id2label = None
+def ensure_vit_loaded():
+    """Load ViT on first inference request so the web server can start immediately."""
+    global processor, vit_model, id2label
+    if vit_model is not None:
+        return
+    with _load_lock:
+        if vit_model is not None:
+            return
+        print("[ViT] Loading Vision Transformer model...")
+        model_source, local_only = _load_vit_weights()
+        processor = AutoImageProcessor.from_pretrained(model_source, local_files_only=local_only)
+        vit_model = AutoModelForImageClassification.from_pretrained(
+            model_source, local_files_only=local_only
+        ).to(DEVICE)
+        vit_model.eval()
+        id2label = vit_model.config.id2label
+        print(f"[ViT] Model loaded successfully. Labels: {id2label}")
 
 
 # =========================
@@ -117,8 +126,7 @@ def crop_face(frame_bgr):
 
 def predict_image(face_bgr):
     """Predict on a single face crop using ViT"""
-    if vit_model is None or processor is None:
-        raise RuntimeError("ViT model not loaded!")
+    ensure_vit_loaded()
 
     rgb = cv2.cvtColor(face_bgr, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(rgb)
@@ -164,6 +172,7 @@ def predict_video(video_path, frames_to_sample=NUM_SAMPLED_FRAMES, progress_cb=N
             except Exception:
                 pass
 
+    ensure_vit_loaded()
     emit("vit_frames_extracting", 15, "[ViT] Extracting frames...")
 
     # Sample frames

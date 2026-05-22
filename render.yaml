@@ -4,9 +4,11 @@ services:
     name: deepshield
     runtime: docker
     plan: free
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars:
-      - key: PORT
-        value: "7860"
       - key: FLASK_DEBUG
         value: "0"
+      - key: HF_HOME
+        value: /tmp/hf_cache
+      - key: TRANSFORMERS_CACHE
+        value: /tmp/hf_cache

@@ -8,7 +8,6 @@ import uuid
 import json
 import hashlib
 import threading
-from parallel_inference import get_vit_result_only
 from db import init_db, get_db_connection
 from auth import auth_bp
 from report_generator import generate_report
@@ -25,6 +24,12 @@ app.register_blueprint(auth_bp)
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+@app.route('/health')
+def health():
+    """Lightweight health check for Render/load balancers (no ML model load)."""
+    return jsonify({'status': 'ok'}), 200
 
 
 # ── Utilities ────────────────────────────────────────────────────────────────
@@ -132,6 +137,7 @@ def predict():
         })
 
     # ── Feature 1 + 2: Inference with live progress + GradCAM ────────────────
+    from parallel_inference import get_vit_result_only
     result, confidence, frame_results, mean_probs, heatmap_frames = get_vit_result_only(
         save_path,
         frames_to_sample=frames_to_sample,
@@ -185,6 +191,7 @@ def api_analyze():
     save_path = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(save_path)
 
+    from parallel_inference import get_vit_result_only
     result, confidence, frame_results, mean_probs, heatmap_frames = get_vit_result_only(save_path, frames_to_sample=10)
 
     return jsonify({'result': result, 'confidence': float(confidence)}), 200

@@ -1,6 +1,7 @@
 node_modules
 dist
 .git
+.github
 uploads
 temp_frames
 *.db
@@ -8,3 +9,10 @@ __pycache__
 .env
 .vscode
 .idea
+*.mp4
+*.md
+!README.md
+BEFORE_AFTER_COMPARISON.md
+IMPLEMENTATION_SUMMARY.md
+INTEGRATION_GUIDE.md
+QUICKSTART.md
