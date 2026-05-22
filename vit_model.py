@@ -4,13 +4,20 @@ Integrated from PExpo (Hugging Face Model: Wvolf/ViT_Deepfake_Detection)
 """
 
 import os
+import gc
 import cv2
-import torch
 import uuid
 import threading
 import numpy as np
 from PIL import Image
-from transformers import AutoImageProcessor, AutoModelForImageClassification
+
+# Limit PyTorch thread pools (saves RAM on small instances)
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+import torch
+torch.set_num_threads(1)
 
 # =========================
 # CONFIG
@@ -51,15 +58,29 @@ def ensure_vit_loaded():
     with _load_lock:
         if vit_model is not None:
             return
+        from transformers import AutoImageProcessor, AutoModelForImageClassification
+
         print("[ViT] Loading Vision Transformer model...")
         model_source, local_only = _load_vit_weights()
         processor = AutoImageProcessor.from_pretrained(model_source, local_files_only=local_only)
         vit_model = AutoModelForImageClassification.from_pretrained(
-            model_source, local_files_only=local_only
-        ).to(DEVICE)
+            model_source,
+            local_files_only=local_only,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.float16,
+        )
         vit_model.eval()
         id2label = vit_model.config.id2label
         print(f"[ViT] Model loaded successfully. Labels: {id2label}")
+
+
+def release_vit_memory():
+    """Free model RAM after each scan (required for 512MB hosts)."""
+    global processor, vit_model, id2label
+    vit_model = None
+    processor = None
+    id2label = None
+    gc.collect()
 
 
 # =========================
@@ -132,11 +153,11 @@ def predict_image(face_bgr):
     pil_img = Image.fromarray(rgb)
 
     inputs = processor(images=pil_img, return_tensors="pt")
-    inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
+    inputs = {k: v.to(dtype=torch.float16) for k, v in inputs.items()}
 
-    with torch.no_grad():
+    with torch.inference_mode():
         outputs = vit_model(**inputs)
-        probs = torch.softmax(outputs.logits, dim=-1)[0].cpu().numpy()
+        probs = torch.softmax(outputs.logits.float(), dim=-1)[0].cpu().numpy()
 
     pred_idx = int(np.argmax(probs))
     pred_label = id2label[pred_idx]
@@ -149,6 +170,8 @@ def predict_image(face_bgr):
 # MAIN PREDICTION FUNCTION
 # =========================
 def predict_video(video_path, frames_to_sample=NUM_SAMPLED_FRAMES, progress_cb=None):
+    max_frames = int(os.environ.get("MAX_FRAMES", str(NUM_SAMPLED_FRAMES)))
+    frames_to_sample = min(frames_to_sample, max_frames)
     """
     Analyze a video for deepfake content using ViT model.
 

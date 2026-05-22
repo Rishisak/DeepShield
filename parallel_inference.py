@@ -1,15 +1,15 @@
 """
 Parallel Inference Engine
-Runs DeepFake model and ViT model concurrently and returns results
+Runs DeepFake model and ViT model concurrently and returns results.
+On memory-constrained hosts (Render free tier), use VIT_ONLY=1 (default).
 """
 
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 from typing import Callable, Optional, Tuple, Dict, List
 import numpy as np
 
-from model import predict_video as predict_deepfake
-from vit_model import predict_video as predict_vit
+VIT_ONLY = os.environ.get("VIT_ONLY", "1") == "1"
 
 
 def run_parallel_inference(
@@ -64,6 +64,8 @@ def run_parallel_inference(
         },
     }
 
+    from vit_model import predict_video as predict_vit
+
     def run_vit():
         """Run ViT model prediction"""
         try:
@@ -82,6 +84,7 @@ def run_parallel_inference(
     def run_deepfake():
         """Run DeepFake model prediction"""
         try:
+            from model import predict_video as predict_deepfake
             label, conf, frames, heatmap_frames = predict_deepfake(
                 video_path, frames_to_sample=frames_to_sample, progress_cb=progress_cb
             )
@@ -94,12 +97,13 @@ def run_parallel_inference(
             print(f"[ERROR] {error_msg}")
             results["deepfake"]["error"] = error_msg
 
-    # Run both models in parallel using threads
+    if VIT_ONLY:
+        run_vit()
+        return results
+
     with ThreadPoolExecutor(max_workers=2) as executor:
         vit_future = executor.submit(run_vit)
         deepfake_future = executor.submit(run_deepfake)
-
-        # Wait for both to complete
         for future in as_completed([vit_future, deepfake_future]):
             try:
                 future.result()
@@ -125,6 +129,19 @@ def get_vit_result_only(
     Returns:
         (result_label, confidence, frame_results, mean_probs, heatmap_frames)
     """
+    if VIT_ONLY:
+        from vit_model import predict_video as predict_vit, release_vit_memory
+        try:
+            label, conf, frame_results, mean_probs = predict_vit(
+                video_path,
+                frames_to_sample=frames_to_sample,
+                progress_cb=progress_cb,
+            )
+            mean_probs_out = mean_probs.tolist() if isinstance(mean_probs, np.ndarray) else mean_probs
+            return label, conf, frame_results, mean_probs_out, []
+        finally:
+            release_vit_memory()
+
     results = run_parallel_inference(
         video_path,
         frames_to_sample=frames_to_sample,
@@ -136,7 +153,6 @@ def get_vit_result_only(
     if vit_data["error"]:
         raise RuntimeError(vit_data["error"])
 
-    # Try to include deepfake model's heatmap frames if available
     heatmap_frames = []
     try:
         deepfake_data = results.get("deepfake", {})

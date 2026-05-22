@@ -32,6 +32,9 @@ RUN mkdir -p uploads temp_frames /tmp/hf_cache
 
 ENV PORT=10000
 ENV FLASK_DEBUG=0
+ENV VIT_ONLY=1
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
 ENV HF_HOME=/tmp/hf_cache
 ENV TRANSFORMERS_CACHE=/tmp/hf_cache
 
